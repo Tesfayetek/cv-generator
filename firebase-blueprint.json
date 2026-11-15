@@ -5,49 +5,16 @@
       "description": "Authenticated user account metadata and preferences",
       "type": "object",
       "properties": {
-        "userId": {
-          "type": "string",
-          "pattern": "^[a-zA-Z0-9_\\-]+$",
-          "maxLength": 128
-        },
-        "fullName": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 120
-        },
-        "email": {
-          "type": "string",
-          "format": "email",
-          "maxLength": 180
-        },
-        "role": {
-          "type": "string",
-          "enum": ["user", "admin"]
-        },
-        "defaultTitle": {
-          "type": "string",
-          "maxLength": 140
-        },
-        "location": {
-          "type": "string",
-          "maxLength": 140
-        },
-        "favoriteTemplateIds": {
-          "type": "array",
-          "description": "Up to 50 favorite template IDs"
-        },
-        "recentActivities": {
-          "type": "array",
-          "description": "Up to 20 recent CV activity entries"
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "userId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "fullName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "email": { "type": "string", "format": "email", "maxLength": 180 },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "defaultTitle": { "type": "string", "maxLength": 140 },
+        "location": { "type": "string", "maxLength": 140 },
+        "favoriteTemplateIds": { "type": "array", "description": "Up to 50 favorite template IDs" },
+        "recentActivities": { "type": "array", "description": "Up to 20 recent CV activity entries" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "fullName", "email", "role", "createdAt", "updatedAt"]
     },
@@ -56,90 +23,31 @@
       "description": "User-owned structured CV data, section configuration, and design overrides",
       "type": "object",
       "properties": {
-        "cvId": {
-          "type": "string",
-          "pattern": "^[a-zA-Z0-9_\\-]+$",
-          "maxLength": 128
-        },
-        "userId": {
-          "type": "string",
-          "pattern": "^[a-zA-Z0-9_\\-]+$",
-          "maxLength": 128
-        },
-        "cvTitle": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 160
-        },
-        "personalInformation": {
-          "type": "object"
-        },
-        "professionalSummary": {
-          "type": "string",
-          "maxLength": 6000
-        },
-        "careerObjective": {
-          "type": "string",
-          "maxLength": 4000
-        },
-        "workExperience": {
-          "type": "array"
-        },
-        "education": {
-          "type": "array"
-        },
-        "skills": {
-          "type": "array"
-        },
-        "certifications": {
-          "type": "array"
-        },
-        "languages": {
-          "type": "array"
-        },
-        "projects": {
-          "type": "array"
-        },
-        "awards": {
-          "type": "array"
-        },
-        "publications": {
-          "type": "array"
-        },
-        "volunteerExperience": {
-          "type": "array"
-        },
-        "references": {
-          "type": "array"
-        },
-        "sectionOrder": {
-          "type": "array"
-        },
-        "hiddenSections": {
-          "type": "array"
-        },
-        "sectionTitles": {
-          "type": "object"
-        },
-        "selectedTemplateId": {
-          "type": "string",
-          "pattern": "^[a-zA-Z0-9_\\-]+$",
-          "maxLength": 128
-        },
-        "designOverrides": {
-          "type": "object"
-        },
-        "atsMode": {
-          "type": "boolean"
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "cvId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "userId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "cvTitle": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "personalInformation": { "type": "object" },
+        "professionalSummary": { "type": "string", "maxLength": 6000 },
+        "careerObjective": { "type": "string", "maxLength": 4000 },
+        "workExperience": { "type": "array" },
+        "education": { "type": "array" },
+        "skills": { "type": "array" },
+        "certifications": { "type": "array" },
+        "languages": { "type": "array" },
+        "projects": { "type": "array" },
+        "awards": { "type": "array" },
+        "publications": { "type": "array" },
+        "volunteerExperience": { "type": "array" },
+        "references": { "type": "array" },
+        "sectionOrder": { "type": "array" },
+        "hiddenSections": { "type": "array" },
+        "sectionTitles": { "type": "object" },
+        "selectedTemplateId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "designOverrides": { "type": "object" },
+        "attachedCoverPageId": { "type": "string", "maxLength": 128 },
+        "atsMode": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["cvId", "userId", "cvTitle", "personalInformation", "selectedTemplateId", "createdAt", "updatedAt"]
     },
@@ -148,100 +56,73 @@
       "description": "Official CV design template managed by administrators",
       "type": "object",
       "properties": {
-        "templateId": {
-          "type": "string",
-          "pattern": "^[a-zA-Z0-9_\\-]+$",
-          "maxLength": 128
-        },
-        "name": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 120
-        },
-        "category": {
-          "type": "string",
-          "maxLength": 100
-        },
-        "profession": {
-          "type": "string",
-          "maxLength": 100
-        },
-        "description": {
-          "type": "string",
-          "maxLength": 600
-        },
-        "layoutConfiguration": {
-          "type": "object"
-        },
-        "colorConfiguration": {
-          "type": "object"
-        },
-        "typographyConfiguration": {
-          "type": "object"
-        },
-        "atsFriendly": {
-          "type": "boolean"
-        },
-        "previewConfiguration": {
-          "type": "object"
-        },
-        "status": {
-          "type": "string",
-          "enum": ["published", "draft"]
-        },
-        "tier": {
-          "type": "string",
-          "enum": ["free", "premium"]
-        },
-        "popularityScore": {
-          "type": "number"
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "templateId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "category": { "type": "string", "maxLength": 100 },
+        "profession": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 600 },
+        "layoutConfiguration": { "type": "object" },
+        "colorConfiguration": { "type": "object" },
+        "typographyConfiguration": { "type": "object" },
+        "atsFriendly": { "type": "boolean" },
+        "previewConfiguration": { "type": "object" },
+        "status": { "type": "string", "enum": ["published", "draft"] },
+        "tier": { "type": "string", "enum": ["free", "premium"] },
+        "popularityScore": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["templateId", "name", "category", "layoutConfiguration", "colorConfiguration", "typographyConfiguration", "atsFriendly", "status", "createdAt", "updatedAt"]
+    },
+    "CoverPage": {
+      "title": "CoverPage",
+      "description": "User-owned customizable CV cover page document with canvas elements and styling",
+      "type": "object",
+      "properties": {
+        "coverPageId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "userId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "cvId": { "type": "string", "maxLength": 128 },
+        "templateId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "personalInformation": { "type": "object" },
+        "designConfiguration": { "type": "object" },
+        "backgroundConfiguration": { "type": "object" },
+        "uploadedImages": { "type": "object" },
+        "pageSize": { "type": "string", "enum": ["A4", "LETTER", "CUSTOM"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["coverPageId", "userId", "templateId", "title", "personalInformation", "designConfiguration", "backgroundConfiguration", "pageSize", "createdAt", "updatedAt"]
+    },
+    "CoverPageTemplate": {
+      "title": "CoverPageTemplate",
+      "description": "Official CV cover page design template managed by administrators",
+      "type": "object",
+      "properties": {
+        "templateId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "templateName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "category": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 600 },
+        "designConfiguration": { "type": "object" },
+        "previewConfiguration": { "type": "object" },
+        "status": { "type": "string", "enum": ["published", "draft", "archived"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["templateId", "templateName", "category", "designConfiguration", "previewConfiguration", "status", "createdAt", "updatedAt"]
     },
     "CustomDesign": {
       "title": "CustomDesign",
       "description": "User-created custom CV template design configuration",
       "type": "object",
       "properties": {
-        "designId": {
-          "type": "string",
-          "pattern": "^[a-zA-Z0-9_\\-]+$",
-          "maxLength": 128
-        },
-        "userId": {
-          "type": "string",
-          "pattern": "^[a-zA-Z0-9_\\-]+$",
-          "maxLength": 128
-        },
-        "name": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 120
-        },
-        "description": {
-          "type": "string",
-          "maxLength": 500
-        },
-        "designConfiguration": {
-          "type": "object"
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "designId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "userId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "description": { "type": "string", "maxLength": 500 },
+        "designConfiguration": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["designId", "userId", "name", "designConfiguration", "createdAt", "updatedAt"]
     },
@@ -250,33 +131,12 @@
       "description": "Prompt and generated design configuration history for AI Design Generator",
       "type": "object",
       "properties": {
-        "historyId": {
-          "type": "string",
-          "pattern": "^[a-zA-Z0-9_\\-]+$",
-          "maxLength": 128
-        },
-        "userId": {
-          "type": "string",
-          "pattern": "^[a-zA-Z0-9_\\-]+$",
-          "maxLength": 128
-        },
-        "cvId": {
-          "type": "string",
-          "pattern": "^[a-zA-Z0-9_\\-]+$",
-          "maxLength": 128
-        },
-        "prompt": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 1000
-        },
-        "generatedConfiguration": {
-          "type": "object"
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "historyId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "userId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "cvId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "prompt": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "generatedConfiguration": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["historyId", "userId", "prompt", "generatedConfiguration", "createdAt"]
     },
@@ -285,37 +145,14 @@
       "description": "Global application branding, categories, and AI configuration managed by admins",
       "type": "object",
       "properties": {
-        "settingId": {
-          "type": "string",
-          "pattern": "^[a-zA-Z0-9_\\-]+$",
-          "maxLength": 64
-        },
-        "appName": {
-          "type": "string",
-          "maxLength": 80
-        },
-        "tagline": {
-          "type": "string",
-          "maxLength": 160
-        },
-        "defaultPrimaryColor": {
-          "type": "string",
-          "maxLength": 20
-        },
-        "defaultSecondaryColor": {
-          "type": "string",
-          "maxLength": 20
-        },
-        "aiEnabled": {
-          "type": "boolean"
-        },
-        "categories": {
-          "type": "array"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "settingId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 64 },
+        "appName": { "type": "string", "maxLength": 80 },
+        "tagline": { "type": "string", "maxLength": 160 },
+        "defaultPrimaryColor": { "type": "string", "maxLength": 20 },
+        "defaultSecondaryColor": { "type": "string", "maxLength": 20 },
+        "aiEnabled": { "type": "boolean" },
+        "categories": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["settingId", "appName", "tagline", "aiEnabled", "updatedAt"]
     },
@@ -324,19 +161,9 @@
       "description": "Trusted administrator role lookup record",
       "type": "object",
       "properties": {
-        "userId": {
-          "type": "string",
-          "pattern": "^[a-zA-Z0-9_\\-]+$",
-          "maxLength": 128
-        },
-        "email": {
-          "type": "string",
-          "maxLength": 180
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "userId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 180 },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "email", "createdAt"]
     }
@@ -357,6 +184,14 @@
     "/templates/{templateId}": {
       "schema": { "$ref": "#/entities/CVTemplate" },
       "description": "Official CV templates managed by administrators."
+    },
+    "/coverPages/{coverPageId}": {
+      "schema": { "$ref": "#/entities/CoverPage" },
+      "description": "User-saved CV cover page designs isolated by userId."
+    },
+    "/coverPageTemplates/{templateId}": {
+      "schema": { "$ref": "#/entities/CoverPageTemplate" },
+      "description": "Official cover page templates managed by administrators."
     },
     "/customDesigns/{designId}": {
       "schema": { "$ref": "#/entities/CustomDesign" },

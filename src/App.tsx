@@ -2,18 +2,27 @@ import React, { Component, useEffect, useMemo, useState } from 'react';
 import { LogOut, MailWarning, RefreshCw, User } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { createNewCVDocument } from './data/presets';
+import {
+  createCoverPageFromTemplate,
+  STARTER_COVER_PAGE_TEMPLATES,
+} from './data/coverPageTemplates';
 import { STARTER_TEMPLATES } from './data/templates';
 import {
+  attachCoverPageToCV,
+  deleteCoverPageDocument,
   deleteCVDocument,
   deleteCustomDesign,
   logUserActivity,
   saveAIDesignHistoryEntry,
+  saveCoverPageDocument,
   saveCustomDesign,
   saveCVDocument,
   subscribeAIDesignHistory,
+  subscribeCoverPageTemplates,
   subscribeCustomDesigns,
   subscribePlatformSettings,
   subscribeTemplates,
+  subscribeUserCoverPages,
   subscribeUserCVs,
   updateUserProfileDoc,
 } from './services/firestoreService';
@@ -25,17 +34,19 @@ import type {
   DesignConfiguration,
   PlatformSettings,
 } from './types/cv';
+import type { CoverPageDocument, CoverPageTemplate } from './types/coverPage';
 import { AdminDashboardView } from './components/admin/AdminDashboardView';
 import { AIDesignGeneratorView } from './components/ai-designer/AIDesignGeneratorView';
 import { AuthView } from './components/auth/AuthView';
 import { ProfileSettingsModal } from './components/auth/ProfileSettingsModal';
+import { CoverPageDesignerView } from './components/cover-page/CoverPageDesignerView';
 import { CreateCVFlowsModal } from './components/creation/CreateCVFlowsModal';
 import { CustomTemplateBuilderModal } from './components/custom-builder/CustomTemplateBuilderModal';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { CVStudioView } from './components/studio/CVStudioView';
 import { TemplateGalleryView } from './components/templates/TemplateGalleryView';
 
-type AppView = 'dashboard' | 'templates' | 'studio' | 'ai-designer' | 'admin';
+type AppView = 'dashboard' | 'templates' | 'studio' | 'cover-pages' | 'ai-designer' | 'admin';
 
 class ErrorBoundary extends Component<
   { children: React.ReactNode },
@@ -87,8 +98,13 @@ const AppWorkspace: React.FC = () => {
   const [publicBrowseTemplates, setPublicBrowseTemplates] = useState(false);
 
   const [templates, setTemplates] = useState<CVTemplate[]>(STARTER_TEMPLATES);
+  const [coverPageTemplates, setCoverPageTemplates] = useState<CoverPageTemplate[]>(
+    STARTER_COVER_PAGE_TEMPLATES
+  );
   const [cvs, setCvs] = useState<CVDocument[]>([]);
   const [activeCVId, setActiveCVId] = useState<string | null>(null);
+  const [coverPages, setCoverPages] = useState<CoverPageDocument[]>([]);
+  const [activeCoverPageId, setActiveCoverPageId] = useState<string | null>(null);
   const [customDesigns, setCustomDesigns] = useState<CustomDesign[]>([]);
   const [aiHistory, setAiHistory] = useState<AIDesignHistoryEntry[]>([]);
   const [settings, setSettings] = useState<PlatformSettings>({
@@ -107,12 +123,14 @@ const AppWorkspace: React.FC = () => {
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [verifyNotice, setVerifyNotice] = useState('');
 
-  // Public listeners (templates + branding settings)
+  // Public listeners (templates + cover page templates + branding settings)
   useEffect(() => {
     const unsubTemplates = subscribeTemplates(isAdmin, setTemplates);
+    const unsubCoverTemplates = subscribeCoverPageTemplates(isAdmin, setCoverPageTemplates);
     const unsubSettings = subscribePlatformSettings(setSettings);
     return () => {
       unsubTemplates();
+      unsubCoverTemplates();
       unsubSettings();
     };
   }, [isAdmin]);
@@ -126,10 +144,17 @@ const AppWorkspace: React.FC = () => {
       setCvs(list);
       setActiveCVId((curr) => (curr && list.some((c) => c.cvId === curr) ? curr : list[0]?.cvId || null));
     });
+    const unsubCoverPages = subscribeUserCoverPages(firebaseUser.uid, (list) => {
+      setCoverPages(list);
+      setActiveCoverPageId((curr) =>
+        curr && list.some((c) => c.coverPageId === curr) ? curr : list[0]?.coverPageId || null
+      );
+    });
     const unsubDesigns = subscribeCustomDesigns(firebaseUser.uid, setCustomDesigns);
     const unsubAiHist = subscribeAIDesignHistory(firebaseUser.uid, setAiHistory);
     return () => {
       unsubCVs();
+      unsubCoverPages();
       unsubDesigns();
       unsubAiHist();
     };
@@ -193,6 +218,76 @@ const AppWorkspace: React.FC = () => {
     if (firebaseUser && isVerified) {
       await deleteCVDocument(cvId);
     }
+  };
+
+  const handleSaveCoverPage = async (cp: CoverPageDocument, isNew = false) => {
+    setCoverPages((prev) => {
+      const exists = prev.some((item) => item.coverPageId === cp.coverPageId);
+      return exists
+        ? prev.map((item) => (item.coverPageId === cp.coverPageId ? cp : item))
+        : [cp, ...prev];
+    });
+    setActiveCoverPageId(cp.coverPageId);
+    if (firebaseUser && isVerified) {
+      await saveCoverPageDocument(cp, isNew);
+      await recordActivity(isNew ? 'Created Cover Page' : 'Updated Cover Page', cp.title);
+    }
+  };
+
+  const handleDuplicateCoverPage = async (cp: CoverPageDocument) => {
+    if (!firebaseUser) return;
+    const now = new Date().toISOString();
+    const copy: CoverPageDocument = {
+      ...JSON.parse(JSON.stringify(cp)),
+      coverPageId: `cp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      title: `${cp.title} (Copy)`,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await handleSaveCoverPage(copy, true);
+  };
+
+  const handleDeleteCoverPage = async (coverPageId: string) => {
+    setCoverPages((prev) => prev.filter((c) => c.coverPageId !== coverPageId));
+    if (activeCoverPageId === coverPageId) setActiveCoverPageId(null);
+    if (firebaseUser && isVerified) {
+      await deleteCoverPageDocument(coverPageId);
+    }
+  };
+
+  const handleAttachCoverPageToCV = async (cvId: string, coverPageId: string) => {
+    setCvs((prev) =>
+      prev.map((c) => (c.cvId === cvId ? { ...c, attachedCoverPageId: coverPageId } : c))
+    );
+    if (coverPageId) {
+      setCoverPages((prev) =>
+        prev.map((cp) => (cp.coverPageId === coverPageId ? { ...cp, cvId } : cp))
+      );
+    }
+    if (firebaseUser && isVerified) {
+      await attachCoverPageToCV(cvId, coverPageId);
+    }
+  };
+
+  const handleOpenCoverDesignerForCV = async (forCV?: CVDocument) => {
+    if (!firebaseUser) return;
+    if (forCV) {
+      const existing = coverPages.find(
+        (cp) =>
+          (forCV.attachedCoverPageId && cp.coverPageId === forCV.attachedCoverPageId) ||
+          cp.cvId === forCV.cvId
+      );
+      if (existing) {
+        setActiveCoverPageId(existing.coverPageId);
+        setView('cover-pages');
+        return;
+      }
+      const starterTpl = coverPageTemplates[0] || STARTER_COVER_PAGE_TEMPLATES[0];
+      const created = createCoverPageFromTemplate(firebaseUser.uid, starterTpl, forCV);
+      await handleSaveCoverPage(created, true);
+      await handleAttachCoverPageToCV(forCV.cvId, created.coverPageId);
+    }
+    setView('cover-pages');
   };
 
   const handleUseOrCustomizeTemplate = async (template: CVTemplate, openStudioAfter: boolean) => {
@@ -392,6 +487,7 @@ const AppWorkspace: React.FC = () => {
               { id: 'dashboard', label: 'Dashboard' },
               { id: 'templates', label: 'Templates' },
               { id: 'studio', label: 'CV Studio' },
+              { id: 'cover-pages', label: 'Cover Pages' },
               { id: 'ai-designer', label: 'AI Designer' },
               ...(isAdmin ? [{ id: 'admin', label: 'Admin' }] : []),
             ] as Array<{ id: AppView; label: string }>
@@ -490,16 +586,24 @@ const AppWorkspace: React.FC = () => {
             cvs={cvs}
             templates={templates}
             customDesigns={customDesigns}
+            coverPages={coverPages}
             onOpenCreateFlow={(method) => setCreateFlowModal(method)}
             onBrowseTemplates={() => setView('templates')}
             onOpenAIDesigner={() => setView('ai-designer')}
             onOpenCustomBuilder={() => setCustomBuilderOpen(true)}
+            onOpenCoverDesigner={(cv) => handleOpenCoverDesignerForCV(cv)}
             onEditCV={(cv) => {
               setActiveCVId(cv.cvId);
               setView('studio');
             }}
             onDuplicateCV={handleDuplicateCV}
             onDeleteCV={handleDeleteCV}
+            onEditCoverPage={(cp) => {
+              setActiveCoverPageId(cp.coverPageId);
+              setView('cover-pages');
+            }}
+            onDuplicateCoverPage={handleDuplicateCoverPage}
+            onDeleteCoverPage={handleDeleteCoverPage}
             onApplyCustomDesign={handleApplyCustomDesignToActiveOrNew}
             onDeleteCustomDesign={async (id) => {
               setCustomDesigns((prev) => prev.filter((d) => d.designId !== id));
@@ -524,12 +628,31 @@ const AppWorkspace: React.FC = () => {
           <CVStudioView
             cv={activeCV}
             templates={templates}
+            coverPages={coverPages}
             aiEnabled={settings.aiEnabled}
             onSaveCV={(updated) => handleSaveCV(updated, false)}
             onSaveCustomDesign={(name, desc, cfg) =>
               handleSaveCustomDesign(name, desc, cfg, false)
             }
             onOpenAIDesigner={() => setView('ai-designer')}
+            onOpenCoverDesignerForCV={(cv) => handleOpenCoverDesignerForCV(cv)}
+            onAttachCoverPage={handleAttachCoverPageToCV}
+          />
+        )}
+
+        {view === 'cover-pages' && (
+          <CoverPageDesignerView
+            userId={firebaseUser.uid}
+            coverPages={coverPages}
+            activeCoverPageId={activeCoverPageId}
+            onSelectCoverPageId={setActiveCoverPageId}
+            coverPageTemplates={coverPageTemplates}
+            cvs={cvs}
+            cvTemplates={templates}
+            aiEnabled={settings.aiEnabled}
+            onSaveCoverPage={handleSaveCoverPage}
+            onDeleteCoverPage={handleDeleteCoverPage}
+            onAttachToCV={handleAttachCoverPageToCV}
           />
         )}
 
@@ -561,7 +684,11 @@ const AppWorkspace: React.FC = () => {
         )}
 
         {view === 'admin' && isAdmin && (
-          <AdminDashboardView templates={templates} settings={settings} />
+          <AdminDashboardView
+            templates={templates}
+            coverPageTemplates={coverPageTemplates}
+            settings={settings}
+          />
         )}
       </main>
 

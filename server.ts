@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 import mammoth from 'mammoth';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -24,6 +24,29 @@ function getAiClient(): GoogleGenAI {
       },
     },
   });
+}
+
+async function generateContentWithRetry(
+  ai: GoogleGenAI,
+  params: Parameters<GoogleGenAI['models']['generateContent']>[0],
+  maxAttempts = 3
+) {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await ai.models.generateContent(params);
+    } catch (err: any) {
+      lastError = err;
+      const msg = String(err?.message || '');
+      const status = Number(err?.status || err?.code || 0);
+      const isTransient = status === 503 || status === 429 || msg.includes('503') || msg.includes('UNAVAILABLE');
+      if (!isTransient || attempt === maxAttempts) {
+        throw err;
+      }
+      await new Promise((r) => setTimeout(r, attempt * 1000));
+    }
+  }
+  throw lastError;
 }
 
 // Simple sliding-window rate limiter for abuse protection
@@ -56,6 +79,42 @@ const VALID_FONTS = [
   'Garamond',
   'Montserrat',
   'Source Sans 3',
+];
+
+const VALID_COVER_FONTS = [
+  'Inter',
+  'Montserrat',
+  'Lato',
+  'Roboto',
+  'Open Sans',
+  'Arial',
+  'Georgia',
+  'Garamond',
+  'Playfair Display',
+];
+
+const VALID_COVER_BG_TYPES = [
+  'solid',
+  'gradient',
+  'image',
+  'pattern-geometric',
+  'pattern-abstract',
+  'minimal-white',
+];
+
+const VALID_COVER_PATTERNS = ['none', 'grid', 'dots', 'diagonal', 'rings', 'waves', 'hexagons'];
+const VALID_ELEMENT_TYPES = ['text', 'photo', 'personalLogo', 'companyLogo', 'colorBlock', 'shape', 'line', 'icon'];
+const VALID_FIELD_BINDINGS = [
+  'fullName',
+  'professionalTitle',
+  'professionalSubtitle',
+  'cvTitle',
+  'tagline',
+  'careerSpecialty',
+  'introduction',
+  'documentDate',
+  'targetOrganization',
+  'contactLine',
 ];
 
 const VALID_STRUCTURES = ['one-column', 'two-column-balanced', 'sidebar-left', 'sidebar-right'];
@@ -130,6 +189,93 @@ function sanitizeDesignConfig(raw: any, fallback: any): any {
       marginLeft: typeof page.marginLeft === 'number' ? clamp(page.marginLeft, 10, 25) : fallback.page.marginLeft,
       sectionSpacing: typeof page.sectionSpacing === 'number' ? clamp(page.sectionSpacing, 8, 24) : fallback.page.sectionSpacing,
       explicitPageBreaks: Array.isArray(fallback.page.explicitPageBreaks) ? fallback.page.explicitPageBreaks : [],
+    },
+  };
+}
+
+function sanitizeCoverPageAIResponse(raw: any, currentDesign?: any, currentBackground?: any) {
+  const dc = raw?.designConfiguration || {};
+  const bg = raw?.backgroundConfiguration || {};
+  const fallbackFont = VALID_COVER_FONTS.includes(dc.fontFamily) ? dc.fontFamily : (currentDesign?.fontFamily || 'Inter');
+  const fallbackHeadingFont = VALID_COVER_FONTS.includes(dc.headingFontFamily)
+    ? dc.headingFontFamily
+    : (currentDesign?.headingFontFamily || 'Montserrat');
+
+  const rawElements = Array.isArray(dc.elements) ? dc.elements : [];
+  const sanitizedElements = rawElements
+    .slice(0, 28)
+    .filter((item: any) => item && VALID_ELEMENT_TYPES.includes(item.type))
+    .map((item: any, idx: number) => {
+      const style = item.style || {};
+      const shape = ['circle', 'square', 'rounded'].includes(item.crop?.shape) ? item.crop.shape : 'circle';
+      return {
+        id: typeof item.id === 'string' && item.id.trim() ? item.id.replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 48) : `ai_el_${idx}`,
+        type: item.type,
+        label: typeof item.label === 'string' ? item.label.slice(0, 60) : `Element ${idx + 1}`,
+        fieldBinding: VALID_FIELD_BINDINGS.includes(item.fieldBinding) ? item.fieldBinding : undefined,
+        text: typeof item.text === 'string' ? item.text.slice(0, 400) : undefined,
+        shapeKind: ['rectangle', 'circle', 'rounded', 'triangle', 'diamond', 'pill'].includes(item.shapeKind)
+          ? item.shapeKind
+          : 'rectangle',
+        iconName: ['briefcase', 'award', 'globe', 'book', 'sparkles', 'compass', 'layers', 'shield'].includes(item.iconName)
+          ? item.iconName
+          : 'sparkles',
+        x: clamp(Number(item.x) || 0, 0, 96),
+        y: clamp(Number(item.y) || 0, 0, 96),
+        width: clamp(Number(item.width) || 20, 0.25, 100),
+        height: clamp(Number(item.height) || 6, 0.25, 100),
+        zIndex: clamp(Math.round(Number(item.zIndex) || idx + 1), 1, 50),
+        locked: false,
+        rotation: clamp(Number(item.rotation) || 0, -180, 180),
+        opacity: clamp(Number(item.opacity ?? 1), 0.05, 1),
+        style: {
+          fontFamily: VALID_COVER_FONTS.includes(style.fontFamily) ? style.fontFamily : fallbackFont,
+          fontSize: typeof style.fontSize === 'number' ? clamp(style.fontSize, 8, 56) : 13,
+          fontWeight: ['400', '500', '600', '700', '800'].includes(String(style.fontWeight)) ? String(style.fontWeight) : '400',
+          fontStyle: style.fontStyle === 'italic' ? 'italic' : 'normal',
+          color: isHexColor(style.color) ? style.color : '#1E293B',
+          backgroundColor:
+            style.backgroundColor === 'transparent' || isHexColor(style.backgroundColor)
+              ? style.backgroundColor
+              : undefined,
+          borderColor: isHexColor(style.borderColor) ? style.borderColor : undefined,
+          borderWidth: typeof style.borderWidth === 'number' ? clamp(style.borderWidth, 0, 10) : 0,
+          borderRadius: typeof style.borderRadius === 'number' ? clamp(style.borderRadius, 0, 40) : 0,
+          textAlign: ['left', 'center', 'right'].includes(style.textAlign) ? style.textAlign : 'left',
+          letterSpacing: typeof style.letterSpacing === 'number' ? clamp(style.letterSpacing, -0.04, 0.3) : 0,
+          lineHeight: typeof style.lineHeight === 'number' ? clamp(style.lineHeight, 1.0, 2.2) : 1.5,
+          textTransform: ['none', 'uppercase', 'capitalize'].includes(style.textTransform) ? style.textTransform : 'none',
+        },
+        crop: item.type === 'photo' || item.type === 'personalLogo' || item.type === 'companyLogo'
+          ? { zoom: 1, offsetX: 0, offsetY: 0, shape }
+          : undefined,
+      };
+    });
+
+  return {
+    rationale: typeof raw?.rationale === 'string' ? raw.rationale.slice(0, 500) : 'Generated editable cover page composition.',
+    designConfiguration: {
+      colorSchemeName: typeof dc.colorSchemeName === 'string' ? dc.colorSchemeName.slice(0, 40) : 'AI Bespoke',
+      primaryColor: isHexColor(dc.primaryColor) ? dc.primaryColor : (currentDesign?.primaryColor || '#142B4A'),
+      secondaryColor: isHexColor(dc.secondaryColor) ? dc.secondaryColor : (currentDesign?.secondaryColor || '#2864A6'),
+      accentColor: isHexColor(dc.accentColor) ? dc.accentColor : (currentDesign?.accentColor || '#EAF2FB'),
+      textColor: isHexColor(dc.textColor) ? dc.textColor : (currentDesign?.textColor || '#1E293B'),
+      mutedTextColor: isHexColor(dc.mutedTextColor) ? dc.mutedTextColor : (currentDesign?.mutedTextColor || '#475569'),
+      fontFamily: fallbackFont,
+      headingFontFamily: fallbackHeadingFont,
+      alignment: ['left', 'center', 'right'].includes(dc.alignment) ? dc.alignment : 'left',
+      elements: sanitizedElements.length > 0 ? sanitizedElements : (currentDesign?.elements || []),
+    },
+    backgroundConfiguration: {
+      type: VALID_COVER_BG_TYPES.includes(bg.type) ? bg.type : (currentBackground?.type || 'solid'),
+      primaryColor: isHexColor(bg.primaryColor) ? bg.primaryColor : (currentBackground?.primaryColor || '#FFFFFF'),
+      secondaryColor: isHexColor(bg.secondaryColor) ? bg.secondaryColor : (currentBackground?.secondaryColor || '#F8FAFC'),
+      gradientAngle: typeof bg.gradientAngle === 'number' ? clamp(bg.gradientAngle, 0, 360) : 135,
+      patternType: VALID_COVER_PATTERNS.includes(bg.patternType) ? bg.patternType : 'none',
+      patternColor: isHexColor(bg.patternColor) ? bg.patternColor : '#2864A6',
+      patternOpacity: typeof bg.patternOpacity === 'number' ? clamp(bg.patternOpacity, 0.02, 0.35) : 0.08,
+      marginMm: typeof bg.marginMm === 'number' ? clamp(bg.marginMm, 8, 25) : 14,
+      showBleedGuides: Boolean(currentBackground?.showBleedGuides),
     },
   };
 }
@@ -717,6 +863,138 @@ STRICT ACCURACY RULES:
     } catch (error: any) {
       console.error('CV extraction error:', error);
       res.status(500).json({ error: error?.message || 'Failed to extract structured CV data.' });
+    }
+  });
+
+  // 5. AI Cover Page Generator & Iterative Refinement Engine
+  app.post('/api/ai/cover-page', async (req, res) => {
+    try {
+      const { prompt, currentDesign, currentBackground, personalInformation } = req.body || {};
+      if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+        res.status(400).json({ error: 'Cover page design prompt is required.' });
+        return;
+      }
+
+      const ai = getAiClient();
+      const systemInstruction = `You are a senior editorial graphic designer for AI CV Studio's Cover Page Designer.
+Convert the user's natural-language prompt (or refinement instruction on an existing layout) into a fully editable JSON Cover Page DesignConfiguration and BackgroundConfiguration.
+All elements live on a percentage canvas (x: 0..100, y: 0..100, width: 0.3..100, height: 0.3..100).
+CRITICAL LAYOUT & CONTRAST RULES:
+1. Ensure zero overlapping text boxes! Leave clean vertical spacing between fullName, professionalTitle, tagline, introduction, and contactLine.
+2. Guarantee high WCAG AA contrast between background/colorBlock colors and text colors (e.g., white #FFFFFF or #E2E8F0 text on dark navy #142B4A / charcoal #0F172A; dark slate #1E293B / #142B4A text on light #FFFFFF / #EAF2FB backgrounds).
+3. Include structural visual hierarchy: at least one decorative colorBlock/shape/line element plus text elements bound to fieldBinding values ('cvTitle', 'fullName', 'professionalTitle', 'tagline', 'careerSpecialty', 'introduction', 'contactLine', 'documentDate', 'targetOrganization') and optionally 'photo' / 'companyLogo' / 'icon' when appropriate.
+4. Valid fonts: 'Inter', 'Montserrat', 'Lato', 'Roboto', 'Open Sans', 'Arial', 'Georgia', 'Garamond', 'Playfair Display'.
+5. Valid background types: 'solid', 'gradient', 'pattern-geometric', 'pattern-abstract', 'minimal-white'.
+6. Valid pattern types: 'none', 'grid', 'dots', 'diagonal', 'rings', 'waves', 'hexagons'.
+7. Valid element types: 'text', 'photo', 'personalLogo', 'companyLogo', 'colorBlock', 'shape', 'line', 'icon'.
+8. If refining an existing design, preserve the user's unmentioned elements and modify only what the prompt asks (e.g. changing colors, moving elements to upper left, adding portrait space, changing font).`;
+
+      const response = await generateContentWithRetry(ai, {
+        model: MODEL_NAME,
+        contents: `User cover page request: "${prompt.slice(0, 1200)}"\nPersonal context: ${JSON.stringify({
+          fullName: personalInformation?.fullName || '',
+          professionalTitle: personalInformation?.professionalTitle || '',
+          targetOrganization: personalInformation?.targetOrganization || '',
+        })}\nExisting layout (for refinement if provided): ${JSON.stringify(
+          currentDesign && currentBackground
+            ? { designConfiguration: currentDesign, backgroundConfiguration: currentBackground }
+            : null
+        )}`,
+        config: {
+          systemInstruction,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              rationale: { type: Type.STRING },
+              backgroundConfiguration: {
+                type: Type.OBJECT,
+                properties: {
+                  type: { type: Type.STRING },
+                  primaryColor: { type: Type.STRING },
+                  secondaryColor: { type: Type.STRING },
+                  gradientAngle: { type: Type.NUMBER },
+                  patternType: { type: Type.STRING },
+                  patternColor: { type: Type.STRING },
+                  patternOpacity: { type: Type.NUMBER },
+                  marginMm: { type: Type.NUMBER },
+                },
+                required: ['type', 'primaryColor', 'secondaryColor'],
+              },
+              designConfiguration: {
+                type: Type.OBJECT,
+                properties: {
+                  colorSchemeName: { type: Type.STRING },
+                  primaryColor: { type: Type.STRING },
+                  secondaryColor: { type: Type.STRING },
+                  accentColor: { type: Type.STRING },
+                  textColor: { type: Type.STRING },
+                  mutedTextColor: { type: Type.STRING },
+                  fontFamily: { type: Type.STRING },
+                  headingFontFamily: { type: Type.STRING },
+                  alignment: { type: Type.STRING },
+                  elements: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        id: { type: Type.STRING },
+                        type: { type: Type.STRING },
+                        label: { type: Type.STRING },
+                        fieldBinding: { type: Type.STRING },
+                        text: { type: Type.STRING },
+                        shapeKind: { type: Type.STRING },
+                        iconName: { type: Type.STRING },
+                        x: { type: Type.NUMBER },
+                        y: { type: Type.NUMBER },
+                        width: { type: Type.NUMBER },
+                        height: { type: Type.NUMBER },
+                        zIndex: { type: Type.NUMBER },
+                        opacity: { type: Type.NUMBER },
+                        style: {
+                          type: Type.OBJECT,
+                          properties: {
+                            fontFamily: { type: Type.STRING },
+                            fontSize: { type: Type.NUMBER },
+                            fontWeight: { type: Type.STRING },
+                            fontStyle: { type: Type.STRING },
+                            color: { type: Type.STRING },
+                            backgroundColor: { type: Type.STRING },
+                            borderColor: { type: Type.STRING },
+                            borderWidth: { type: Type.NUMBER },
+                            borderRadius: { type: Type.NUMBER },
+                            textAlign: { type: Type.STRING },
+                            letterSpacing: { type: Type.NUMBER },
+                            lineHeight: { type: Type.NUMBER },
+                            textTransform: { type: Type.STRING },
+                          },
+                        },
+                        crop: {
+                          type: Type.OBJECT,
+                          properties: {
+                            shape: { type: Type.STRING },
+                          },
+                        },
+                      },
+                      required: ['id', 'type', 'label', 'x', 'y', 'width', 'height'],
+                    },
+                  },
+                },
+                required: ['primaryColor', 'secondaryColor', 'fontFamily', 'headingFontFamily', 'elements'],
+              },
+            },
+            required: ['rationale', 'backgroundConfiguration', 'designConfiguration'],
+          },
+        },
+      });
+
+      const parsed = JSON.parse((response.text || '{}').trim());
+      const sanitized = sanitizeCoverPageAIResponse(parsed, currentDesign, currentBackground);
+      res.json(sanitized);
+    } catch (error: any) {
+      console.error('AI cover page error:', error);
+      res.status(500).json({ error: error?.message || 'Failed to generate AI cover page design.' });
     }
   });
 

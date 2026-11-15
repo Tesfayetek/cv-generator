@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
+  BookOpen,
   BookmarkPlus,
   CheckCircle2,
   ChevronLeft,
@@ -34,23 +35,35 @@ import {
   DEFAULT_SECTION_TITLES,
 } from '../../data/presets';
 import { analyzeATSReadiness, resolveEffectiveDesign } from '../../utils/atsChecker';
-import { exportToDOCX, exportToVectorPDF, triggerPrintCV } from '../../utils/exportCV';
+import {
+  exportCombinedCVWithCoverDOCX,
+  exportCombinedCVWithCoverPDF,
+  exportCoverPageToDOCX,
+  exportCoverPageToVectorPDF,
+  exportToDOCX,
+  exportToVectorPDF,
+  triggerPrintCV,
+} from '../../utils/exportCV';
 import type {
   CVDocument,
   CVSectionKey,
   CVTemplate,
   DesignConfiguration,
 } from '../../types/cv';
+import type { CoverPageDocument } from '../../types/coverPage';
 import { CVRenderer } from '../cv/CVRenderer';
 import { CVContentEditor } from './CVContentEditor';
 
 interface CVStudioViewProps {
   cv: CVDocument;
   templates: CVTemplate[];
+  coverPages: CoverPageDocument[];
   aiEnabled: boolean;
   onSaveCV: (cv: CVDocument) => Promise<void>;
   onSaveCustomDesign: (name: string, description: string, config: DesignConfiguration) => Promise<void>;
   onOpenAIDesigner: () => void;
+  onOpenCoverDesignerForCV: (cv: CVDocument) => void;
+  onAttachCoverPage: (cvId: string, coverPageId: string) => Promise<void>;
 }
 
 type StudioTab = 'content' | 'design' | 'layout' | 'sections' | 'ai' | 'ats';
@@ -81,14 +94,27 @@ function parsePageSelection(spec: string, totalPages: number): number[] {
 export const CVStudioView: React.FC<CVStudioViewProps> = ({
   cv: initialCV,
   templates,
+  coverPages,
   aiEnabled,
   onSaveCV,
   onSaveCustomDesign,
   onOpenAIDesigner,
+  onOpenCoverDesignerForCV,
+  onAttachCoverPage,
 }) => {
   const [history, setHistory] = useState<CVDocument[]>([initialCV]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const currentCV = history[historyIndex];
+
+  const attachedCoverPage = useMemo(
+    () =>
+      coverPages.find(
+        (cp) =>
+          (currentCV.attachedCoverPageId && cp.coverPageId === currentCV.attachedCoverPageId) ||
+          cp.cvId === currentCV.cvId
+      ) || null,
+    [coverPages, currentCV.attachedCoverPageId, currentCV.cvId]
+  );
 
   useEffect(() => {
     setHistory([initialCV]);
@@ -412,6 +438,17 @@ export const CVStudioView: React.FC<CVStudioViewProps> = ({
           </button>
           <button
             type="button"
+            onClick={() => onOpenCoverDesignerForCV(currentCV)}
+            className="px-2.5 py-1.5 text-xs font-medium text-[#142B4A] bg-slate-100 hover:bg-slate-200 rounded-lg inline-flex items-center gap-1 whitespace-nowrap"
+            title="Design or Edit Cover Page for this CV"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">
+              {attachedCoverPage ? 'Edit Cover' : 'Cover Page'}
+            </span>
+          </button>
+          <button
+            type="button"
             onClick={() => setSaveDesignOpen(true)}
             className="px-2.5 py-1.5 text-xs font-medium text-[#142B4A] bg-[#EAF2FB] hover:bg-[#dce9f9] rounded-lg inline-flex items-center gap-1 whitespace-nowrap"
           >
@@ -439,7 +476,7 @@ export const CVStudioView: React.FC<CVStudioViewProps> = ({
             </button>
 
             {exportOpen && (
-              <div className="absolute right-0 mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-4 z-40 space-y-3">
+              <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl p-4 z-40 space-y-3">
                 <div className="text-xs font-bold text-[#142B4A]">Export & Print Settings</div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -467,6 +504,41 @@ export const CVStudioView: React.FC<CVStudioViewProps> = ({
                   </div>
                 </div>
 
+                {/* Attach / Replace / Remove Cover Page */}
+                <div className="pt-1 border-t border-slate-100 space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-semibold text-slate-600">
+                    <span>Attached Cover Page</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExportOpen(false);
+                        onOpenCoverDesignerForCV(currentCV);
+                      }}
+                      className="text-[#2864A6] hover:underline"
+                    >
+                      {attachedCoverPage ? 'Edit Cover' : '+ Create New'}
+                    </button>
+                  </div>
+                  {coverPages.length > 0 && (
+                    <select
+                      value={attachedCoverPage?.coverPageId || ''}
+                      onChange={async (e) => {
+                        const cpId = e.target.value;
+                        commitChange((prev) => ({ ...prev, attachedCoverPageId: cpId }));
+                        await onAttachCoverPage(currentCV.cvId, cpId);
+                      }}
+                      className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white"
+                    >
+                      <option value="">No cover page attached</option>
+                      {coverPages.map((cp) => (
+                        <option key={cp.coverPageId} value={cp.coverPageId}>
+                          {cp.title}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
                 <div className="space-y-1.5 pt-1">
                   <button
                     type="button"
@@ -475,7 +547,7 @@ export const CVStudioView: React.FC<CVStudioViewProps> = ({
                     className="w-full py-2 px-3 bg-[#142B4A] hover:bg-[#1e3d66] text-white text-xs font-semibold rounded-lg flex items-center justify-center gap-2"
                   >
                     <FileText className="w-3.5 h-3.5" />
-                    <span>Download Vector PDF</span>
+                    <span>Download CV Vector PDF</span>
                   </button>
                   <button
                     type="button"
@@ -484,8 +556,88 @@ export const CVStudioView: React.FC<CVStudioViewProps> = ({
                     className="w-full py-2 px-3 bg-[#EAF2FB] hover:bg-[#dce9f9] text-[#142B4A] text-xs font-semibold rounded-lg flex items-center justify-center gap-2"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Editable Word (.docx)</span>
+                    <span>Download CV Word (.docx)</span>
                   </button>
+
+                  {attachedCoverPage && (
+                    <>
+                      <button
+                        type="button"
+                        disabled={exporting}
+                        onClick={async () => {
+                          setExporting(true);
+                          try {
+                            await exportCombinedCVWithCoverPDF(
+                              attachedCoverPage,
+                              currentCV,
+                              effectiveDesign,
+                              { pageSize: exportPageSize }
+                            );
+                          } finally {
+                            setExporting(false);
+                          }
+                        }}
+                        className="w-full py-2 px-3 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg flex items-center justify-center gap-2"
+                      >
+                        <BookOpen className="w-3.5 h-3.5" />
+                        <span>Download Complete CV + Cover PDF</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={exporting}
+                        onClick={async () => {
+                          setExporting(true);
+                          try {
+                            await exportCombinedCVWithCoverDOCX(
+                              attachedCoverPage,
+                              currentCV,
+                              effectiveDesign,
+                              exportPageSize
+                            );
+                          } finally {
+                            setExporting(false);
+                          }
+                        }}
+                        className="w-full py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-semibold rounded-lg flex items-center justify-center gap-2"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Download Complete CV + Cover (.docx)</span>
+                      </button>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          disabled={exporting}
+                          onClick={async () => {
+                            setExporting(true);
+                            try {
+                              await exportCoverPageToVectorPDF(attachedCoverPage, exportPageSize);
+                            } finally {
+                              setExporting(false);
+                            }
+                          }}
+                          className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold rounded-lg"
+                        >
+                          Cover PDF Only
+                        </button>
+                        <button
+                          type="button"
+                          disabled={exporting}
+                          onClick={async () => {
+                            setExporting(true);
+                            try {
+                              await exportCoverPageToDOCX(attachedCoverPage, exportPageSize);
+                            } finally {
+                              setExporting(false);
+                            }
+                          }}
+                          className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold rounded-lg"
+                        >
+                          Cover DOCX Only
+                        </button>
+                      </div>
+                    </>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => {

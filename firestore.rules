@@ -81,7 +81,7 @@ service cloud.firestore {
           'careerObjective', 'workExperience', 'education', 'skills', 'certifications',
           'languages', 'projects', 'awards', 'publications', 'volunteerExperience',
           'references', 'sectionOrder', 'hiddenSections', 'sectionTitles',
-          'selectedTemplateId', 'designOverrides', 'atsMode', 'createdAt', 'updatedAt'
+          'selectedTemplateId', 'designOverrides', 'attachedCoverPageId', 'atsMode', 'createdAt', 'updatedAt'
         ])
         && isValidId(data.cvId)
         && data.cvId == cvId
@@ -105,6 +105,7 @@ service cloud.firestore {
         && (!('hiddenSections' in data) || (data.hiddenSections is list && data.hiddenSections.size() <= 25 && (data.hiddenSections.size() == 0 || data.hiddenSections[0] is string)))
         && (!('sectionTitles' in data) || data.sectionTitles is map)
         && (!('designOverrides' in data) || data.designOverrides is map)
+        && (!('attachedCoverPageId' in data) || isValidString(data.attachedCoverPageId, 0, 128))
         && (!('atsMode' in data) || data.atsMode is bool)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
@@ -132,6 +133,46 @@ service cloud.firestore {
         && data.status in ['published', 'draft']
         && (!('tier' in data) || data.tier in ['free', 'premium'])
         && (!('popularityScore' in data) || data.popularityScore is number)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCoverPage(data, coverPageId) {
+      return data.keys().hasAll(['coverPageId', 'userId', 'templateId', 'title', 'personalInformation', 'designConfiguration', 'backgroundConfiguration', 'pageSize', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'coverPageId', 'userId', 'cvId', 'templateId', 'title',
+          'personalInformation', 'designConfiguration', 'backgroundConfiguration',
+          'uploadedImages', 'pageSize', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.coverPageId)
+        && data.coverPageId == coverPageId
+        && isValidId(data.userId)
+        && (!('cvId' in data) || isValidString(data.cvId, 0, 128))
+        && isValidId(data.templateId)
+        && isValidString(data.title, 1, 160)
+        && data.personalInformation is map
+        && data.designConfiguration is map
+        && data.backgroundConfiguration is map
+        && (!('uploadedImages' in data) || data.uploadedImages is map)
+        && data.pageSize in ['A4', 'LETTER', 'CUSTOM']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCoverPageTemplate(data, templateId) {
+      return data.keys().hasAll(['templateId', 'templateName', 'category', 'designConfiguration', 'previewConfiguration', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'templateId', 'templateName', 'category', 'description',
+          'designConfiguration', 'previewConfiguration', 'status', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.templateId)
+        && data.templateId == templateId
+        && isValidString(data.templateName, 1, 120)
+        && isValidString(data.category, 1, 100)
+        && (!('description' in data) || isValidString(data.description, 0, 600))
+        && data.designConfiguration is map
+        && data.previewConfiguration is map
+        && data.status in ['published', 'draft', 'archived']
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -240,7 +281,7 @@ service cloud.firestore {
               'workExperience', 'education', 'skills', 'certifications', 'languages',
               'projects', 'awards', 'publications', 'volunteerExperience', 'references',
               'sectionOrder', 'hiddenSections', 'sectionTitles', 'selectedTemplateId',
-              'designOverrides', 'atsMode', 'updatedAt'
+              'designOverrides', 'attachedCoverPageId', 'atsMode', 'updatedAt'
             ])
           )
         );
@@ -268,6 +309,59 @@ service cloud.firestore {
           'name', 'category', 'profession', 'description',
           'layoutConfiguration', 'colorConfiguration', 'typographyConfiguration',
           'atsFriendly', 'previewConfiguration', 'status', 'tier', 'popularityScore', 'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(templateId);
+    }
+
+    // Collection: coverPages
+    match /coverPages/{coverPageId} {
+      allow get: if isValidId(coverPageId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(coverPageId)
+        && isValidCoverPage(incoming(), coverPageId)
+        && incoming().userId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(coverPageId)
+        && isValidCoverPage(incoming(), coverPageId)
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() || (
+            existing().userId == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'cvId', 'templateId', 'title', 'personalInformation',
+              'designConfiguration', 'backgroundConfiguration', 'uploadedImages',
+              'pageSize', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isVerifiedUser()
+        && isValidId(coverPageId)
+        && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    // Collection: coverPageTemplates
+    match /coverPageTemplates/{templateId} {
+      allow get: if isValidId(templateId) && (existing().status == 'published' || isAdmin());
+      allow list: if resource.data.status == 'published' || isBootstrappedAdmin();
+      allow create: if isAdmin()
+        && isValidId(templateId)
+        && isValidCoverPageTemplate(incoming(), templateId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(templateId)
+        && isValidCoverPageTemplate(incoming(), templateId)
+        && incoming().templateId == existing().templateId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'templateName', 'category', 'description',
+          'designConfiguration', 'previewConfiguration', 'status', 'updatedAt'
         ]);
       allow delete: if isAdmin() && isValidId(templateId);
     }

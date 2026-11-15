@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { STARTER_TEMPLATES } from '../data/templates';
+import { STARTER_COVER_PAGE_TEMPLATES } from '../data/coverPageTemplates';
 import type {
   AIDesignHistoryEntry,
   CVDocument,
@@ -24,6 +25,10 @@ import type {
   UserActivity,
   UserProfile,
 } from '../types/cv';
+import type {
+  CoverPageDocument,
+  CoverPageTemplate,
+} from '../types/coverPage';
 
 export const BOOTSTRAPPED_ADMIN_EMAIL = 'arabsafashion@gmail.com';
 
@@ -176,6 +181,7 @@ function serializeCVPayload(cv: CVDocument, isCreate: boolean) {
     hiddenSections: (cv.hiddenSections || []).slice(0, 25),
     sectionTitles: cv.sectionTitles || {},
     selectedTemplateId: sanitizeId(cv.selectedTemplateId || 'tpl_classic_executive'),
+    attachedCoverPageId: cv.attachedCoverPageId ? sanitizeId(cv.attachedCoverPageId) : '',
     atsMode: Boolean(cv.atsMode),
     updatedAt: serverTimestamp(),
   };
@@ -603,3 +609,222 @@ export async function setUserRoleAdmin(targetUid: string, targetEmail: string, r
     handleFirestoreError(error, OperationType.UPDATE, `users/${targetUid}`);
   }
 }
+
+// ============================================================================
+// Cover Pages CRUD & Subscriptions
+// ============================================================================
+
+function serializeCoverPagePayload(cp: CoverPageDocument, isCreate: boolean) {
+  const base: Record<string, any> = {
+    coverPageId: sanitizeId(cp.coverPageId),
+    userId: sanitizeId(cp.userId),
+    cvId: cp.cvId ? sanitizeId(cp.cvId) : '',
+    templateId: sanitizeId(cp.templateId || 'cp_executive_navy_blue'),
+    title: (cp.title || 'Untitled Cover Page').slice(0, 160),
+    personalInformation: cp.personalInformation || {},
+    designConfiguration: cp.designConfiguration || {},
+    backgroundConfiguration: cp.backgroundConfiguration || {},
+    uploadedImages: cp.uploadedImages || {},
+    pageSize: cp.pageSize === 'LETTER' || cp.pageSize === 'CUSTOM' ? cp.pageSize : 'A4',
+    updatedAt: serverTimestamp(),
+  };
+  if (isCreate) {
+    base.createdAt = serverTimestamp();
+  }
+  return base;
+}
+
+export function subscribeUserCoverPages(
+  userId: string,
+  onData: (coverPages: CoverPageDocument[]) => void,
+  onError?: (err: Error) => void
+) {
+  const q = query(collection(db, 'coverPages'), where('userId', '==', userId));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: CoverPageDocument[] = snapshot.docs.map((d) => {
+        const data = d.data();
+        return {
+          ...(data as any),
+          coverPageId: data.coverPageId || d.id,
+          createdAt: timestampToIso(data.createdAt),
+          updatedAt: timestampToIso(data.updatedAt),
+        };
+      });
+      list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      onData(list);
+    },
+    (error) => {
+      if (onError) onError(error);
+      handleFirestoreError(error, OperationType.LIST, 'coverPages');
+    }
+  );
+}
+
+export async function saveCoverPageDocument(
+  coverPage: CoverPageDocument,
+  isNew = false
+): Promise<void> {
+  const coverPageId = sanitizeId(coverPage.coverPageId);
+  const path = `coverPages/${coverPageId}`;
+  try {
+    const ref = doc(db, 'coverPages', coverPageId);
+    if (isNew) {
+      await setDoc(ref, serializeCoverPagePayload({ ...coverPage, coverPageId }, true));
+    } else {
+      const snap = await getDoc(ref);
+      if (!snap.exists()) {
+        await setDoc(ref, serializeCoverPagePayload({ ...coverPage, coverPageId }, true));
+      } else {
+        const updateData = serializeCoverPagePayload({ ...coverPage, coverPageId }, false);
+        delete updateData.coverPageId;
+        delete updateData.userId;
+        await updateDoc(ref, updateData);
+      }
+    }
+  } catch (error) {
+    handleFirestoreError(error, isNew ? OperationType.CREATE : OperationType.UPDATE, path);
+  }
+}
+
+export async function deleteCoverPageDocument(coverPageId: string): Promise<void> {
+  const id = sanitizeId(coverPageId);
+  try {
+    await deleteDoc(doc(db, 'coverPages', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `coverPages/${id}`);
+  }
+}
+
+export async function attachCoverPageToCV(
+  cvId: string,
+  coverPageId: string
+): Promise<void> {
+  const cleanCvId = sanitizeId(cvId);
+  const cleanCpId = coverPageId ? sanitizeId(coverPageId) : '';
+  try {
+    await updateDoc(doc(db, 'cvs', cleanCvId), {
+      attachedCoverPageId: cleanCpId,
+      updatedAt: serverTimestamp(),
+    });
+    if (cleanCpId) {
+      await updateDoc(doc(db, 'coverPages', cleanCpId), {
+        cvId: cleanCvId,
+        updatedAt: serverTimestamp(),
+      });
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `cvs/${cleanCvId}`);
+  }
+}
+
+// ============================================================================
+// Cover Page Templates (Database-driven with 25+ Starter Seeds)
+// ============================================================================
+
+export function subscribeCoverPageTemplates(
+  isAdmin: boolean,
+  onData: (templates: CoverPageTemplate[]) => void
+) {
+  const q = isAdmin
+    ? query(collection(db, 'coverPageTemplates'))
+    : query(collection(db, 'coverPageTemplates'), where('status', '==', 'published'));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const dbTemplates: CoverPageTemplate[] = snapshot.docs.map((d) => {
+        const data = d.data();
+        return {
+          ...(data as any),
+          templateId: data.templateId || d.id,
+          createdAt: timestampToIso(data.createdAt),
+          updatedAt: timestampToIso(data.updatedAt),
+        };
+      });
+
+      const map = new Map<string, CoverPageTemplate>();
+      for (const t of STARTER_COVER_PAGE_TEMPLATES) {
+        map.set(t.templateId, t);
+      }
+      for (const t of dbTemplates) {
+        map.set(t.templateId, t);
+      }
+      const merged = Array.from(map.values()).filter(
+        (t) => isAdmin || t.status === 'published'
+      );
+      onData(merged);
+    },
+    (error) => {
+      console.warn('Cover page template listener fallback to starter catalog:', error.message);
+      onData(STARTER_COVER_PAGE_TEMPLATES);
+    }
+  );
+}
+
+export async function seedStarterCoverPageTemplatesIfAdmin(): Promise<number> {
+  let seeded = 0;
+  try {
+    const snap = await getDocs(collection(db, 'coverPageTemplates'));
+    const existingIds = new Set(snap.docs.map((d) => d.id));
+    for (const tpl of STARTER_COVER_PAGE_TEMPLATES) {
+      if (!existingIds.has(tpl.templateId)) {
+        await setDoc(doc(db, 'coverPageTemplates', tpl.templateId), {
+          ...tpl,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        seeded += 1;
+      }
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'coverPageTemplates');
+  }
+  return seeded;
+}
+
+export async function upsertCoverPageTemplateAdmin(
+  tpl: CoverPageTemplate,
+  isNew: boolean
+): Promise<void> {
+  const id = sanitizeId(tpl.templateId);
+  const path = `coverPageTemplates/${id}`;
+  try {
+    const ref = doc(db, 'coverPageTemplates', id);
+    const payload: Record<string, any> = {
+      templateId: id,
+      templateName: tpl.templateName.slice(0, 120),
+      category: tpl.category.slice(0, 100),
+      description: (tpl.description || '').slice(0, 600),
+      designConfiguration: tpl.designConfiguration,
+      previewConfiguration: tpl.previewConfiguration,
+      status:
+        tpl.status === 'draft' || tpl.status === 'archived'
+          ? tpl.status
+          : 'published',
+      updatedAt: serverTimestamp(),
+    };
+
+    const existing = await getDoc(ref);
+    if (isNew || !existing.exists()) {
+      payload.createdAt = serverTimestamp();
+      await setDoc(ref, payload);
+    } else {
+      delete payload.templateId;
+      await updateDoc(ref, payload);
+    }
+  } catch (error) {
+    handleFirestoreError(error, isNew ? OperationType.CREATE : OperationType.UPDATE, path);
+  }
+}
+
+export async function deleteCoverPageTemplateAdmin(templateId: string): Promise<void> {
+  const id = sanitizeId(templateId);
+  try {
+    await deleteDoc(doc(db, 'coverPageTemplates', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `coverPageTemplates/${id}`);
+  }
+}
+

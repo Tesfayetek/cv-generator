@@ -266,6 +266,7 @@ export interface CVDocument {
   sectionTitles: Record<CVSectionKey, string>;
   selectedTemplateId: string;
   designOverrides?: DesignConfiguration;
+  attachedCoverPageId?: string;
   atsMode: boolean;
   createdAt: string;
   updatedAt: string;
