@@ -1,0 +1,8 @@
+{
+  "name": "AI CV Studio",
+  "description": "Create. Customize. Impress. AI-powered professional CV design, 35+ bespoke templates, natural-language design generation, and editable PDF & DOCX export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

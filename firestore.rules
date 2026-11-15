@@ -1,0 +1,339 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Core Security Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isVerifiedOwner(userId) {
+      return isVerifiedUser() && request.auth.uid == userId;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'arabsafashion@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (isVerifiedUser() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isValidString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    // Entity Validation Blueprints
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['userId', 'fullName', 'email', 'role', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'fullName', 'email', 'role', 'defaultTitle', 'location', 'favoriteTemplateIds', 'recentActivities', 'createdAt', 'updatedAt'])
+        && isValidId(data.userId)
+        && data.userId == userId
+        && isValidString(data.fullName, 1, 120)
+        && isValidString(data.email, 3, 180)
+        && data.role in ['user', 'admin']
+        && (!('defaultTitle' in data) || isValidString(data.defaultTitle, 0, 140))
+        && (!('location' in data) || isValidString(data.location, 0, 140))
+        && (!('favoriteTemplateIds' in data) || (data.favoriteTemplateIds is list && data.favoriteTemplateIds.size() <= 50 && (data.favoriteTemplateIds.size() == 0 || data.favoriteTemplateIds[0] is string)))
+        && (!('recentActivities' in data) || (data.recentActivities is list && data.recentActivities.size() <= 20))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminRecord(data, adminId) {
+      return data.keys().hasAll(['userId', 'email', 'createdAt'])
+        && data.keys().hasOnly(['userId', 'email', 'createdAt'])
+        && isValidId(data.userId)
+        && data.userId == adminId
+        && isValidString(data.email, 3, 180)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidCV(data, cvId) {
+      return data.keys().hasAll(['cvId', 'userId', 'cvTitle', 'personalInformation', 'selectedTemplateId', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'cvId', 'userId', 'cvTitle', 'personalInformation', 'professionalSummary',
+          'careerObjective', 'workExperience', 'education', 'skills', 'certifications',
+          'languages', 'projects', 'awards', 'publications', 'volunteerExperience',
+          'references', 'sectionOrder', 'hiddenSections', 'sectionTitles',
+          'selectedTemplateId', 'designOverrides', 'atsMode', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.cvId)
+        && data.cvId == cvId
+        && isValidId(data.userId)
+        && isValidString(data.cvTitle, 1, 160)
+        && data.personalInformation is map
+        && isValidId(data.selectedTemplateId)
+        && (!('professionalSummary' in data) || isValidString(data.professionalSummary, 0, 6000))
+        && (!('careerObjective' in data) || isValidString(data.careerObjective, 0, 4000))
+        && (!('workExperience' in data) || (data.workExperience is list && data.workExperience.size() <= 40))
+        && (!('education' in data) || (data.education is list && data.education.size() <= 25))
+        && (!('skills' in data) || (data.skills is list && data.skills.size() <= 80))
+        && (!('certifications' in data) || (data.certifications is list && data.certifications.size() <= 40))
+        && (!('languages' in data) || (data.languages is list && data.languages.size() <= 25))
+        && (!('projects' in data) || (data.projects is list && data.projects.size() <= 35))
+        && (!('awards' in data) || (data.awards is list && data.awards.size() <= 30))
+        && (!('publications' in data) || (data.publications is list && data.publications.size() <= 50))
+        && (!('volunteerExperience' in data) || (data.volunteerExperience is list && data.volunteerExperience.size() <= 25))
+        && (!('references' in data) || (data.references is list && data.references.size() <= 15))
+        && (!('sectionOrder' in data) || (data.sectionOrder is list && data.sectionOrder.size() <= 25 && (data.sectionOrder.size() == 0 || data.sectionOrder[0] is string)))
+        && (!('hiddenSections' in data) || (data.hiddenSections is list && data.hiddenSections.size() <= 25 && (data.hiddenSections.size() == 0 || data.hiddenSections[0] is string)))
+        && (!('sectionTitles' in data) || data.sectionTitles is map)
+        && (!('designOverrides' in data) || data.designOverrides is map)
+        && (!('atsMode' in data) || data.atsMode is bool)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTemplate(data, templateId) {
+      return data.keys().hasAll(['templateId', 'name', 'category', 'layoutConfiguration', 'colorConfiguration', 'typographyConfiguration', 'atsFriendly', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'templateId', 'name', 'category', 'profession', 'description',
+          'layoutConfiguration', 'colorConfiguration', 'typographyConfiguration',
+          'atsFriendly', 'previewConfiguration', 'status', 'tier', 'popularityScore',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.templateId)
+        && data.templateId == templateId
+        && isValidString(data.name, 1, 120)
+        && isValidString(data.category, 1, 100)
+        && (!('profession' in data) || isValidString(data.profession, 0, 100))
+        && (!('description' in data) || isValidString(data.description, 0, 600))
+        && data.layoutConfiguration is map
+        && data.colorConfiguration is map
+        && data.typographyConfiguration is map
+        && data.atsFriendly is bool
+        && (!('previewConfiguration' in data) || data.previewConfiguration is map)
+        && data.status in ['published', 'draft']
+        && (!('tier' in data) || data.tier in ['free', 'premium'])
+        && (!('popularityScore' in data) || data.popularityScore is number)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCustomDesign(data, designId) {
+      return data.keys().hasAll(['designId', 'userId', 'name', 'designConfiguration', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['designId', 'userId', 'name', 'description', 'designConfiguration', 'createdAt', 'updatedAt'])
+        && isValidId(data.designId)
+        && data.designId == designId
+        && isValidId(data.userId)
+        && isValidString(data.name, 1, 120)
+        && (!('description' in data) || isValidString(data.description, 0, 500))
+        && data.designConfiguration is map
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAIDesignHistory(data, historyId) {
+      return data.keys().hasAll(['historyId', 'userId', 'prompt', 'generatedConfiguration', 'createdAt'])
+        && data.keys().hasOnly(['historyId', 'userId', 'cvId', 'prompt', 'generatedConfiguration', 'createdAt'])
+        && isValidId(data.historyId)
+        && data.historyId == historyId
+        && isValidId(data.userId)
+        && (!('cvId' in data) || isValidId(data.cvId))
+        && isValidString(data.prompt, 1, 1000)
+        && data.generatedConfiguration is map
+        && data.createdAt is timestamp;
+    }
+
+    function isValidPlatformSettings(data, settingId) {
+      return data.keys().hasAll(['settingId', 'appName', 'tagline', 'aiEnabled', 'updatedAt'])
+        && data.keys().hasOnly(['settingId', 'appName', 'tagline', 'defaultPrimaryColor', 'defaultSecondaryColor', 'aiEnabled', 'categories', 'updatedAt'])
+        && isValidId(data.settingId)
+        && data.settingId == settingId
+        && isValidString(data.appName, 1, 80)
+        && isValidString(data.tagline, 0, 160)
+        && (!('defaultPrimaryColor' in data) || isValidString(data.defaultPrimaryColor, 1, 20))
+        && (!('defaultSecondaryColor' in data) || isValidString(data.defaultSecondaryColor, 1, 20))
+        && data.aiEnabled is bool
+        && (!('categories' in data) || (data.categories is list && data.categories.size() <= 30 && (data.categories.size() == 0 || data.categories[0] is string)))
+        && data.updatedAt is timestamp;
+    }
+
+    // Collection: users
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isVerifiedOwner(userId)
+        && isValidId(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().role == 'user'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() || (
+            isOwner(userId)
+            && incoming().role == existing().role
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'fullName', 'email', 'defaultTitle', 'location',
+              'favoriteTemplateIds', 'recentActivities', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // Collection: admins
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isAdmin()
+        && isValidId(adminId)
+        && isValidAdminRecord(incoming(), adminId)
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(adminId);
+    }
+
+    // Collection: cvs
+    match /cvs/{cvId} {
+      allow get: if isValidId(cvId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(cvId)
+        && isValidCV(incoming(), cvId)
+        && incoming().userId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(cvId)
+        && isValidCV(incoming(), cvId)
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() || (
+            existing().userId == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'cvTitle', 'personalInformation', 'professionalSummary', 'careerObjective',
+              'workExperience', 'education', 'skills', 'certifications', 'languages',
+              'projects', 'awards', 'publications', 'volunteerExperience', 'references',
+              'sectionOrder', 'hiddenSections', 'sectionTitles', 'selectedTemplateId',
+              'designOverrides', 'atsMode', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isVerifiedUser()
+        && isValidId(cvId)
+        && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    // Collection: templates
+    match /templates/{templateId} {
+      allow get: if isValidId(templateId) && (existing().status == 'published' || isAdmin());
+      allow list: if resource.data.status == 'published' || isBootstrappedAdmin();
+      allow create: if isAdmin()
+        && isValidId(templateId)
+        && isValidTemplate(incoming(), templateId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(templateId)
+        && isValidTemplate(incoming(), templateId)
+        && incoming().templateId == existing().templateId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'category', 'profession', 'description',
+          'layoutConfiguration', 'colorConfiguration', 'typographyConfiguration',
+          'atsFriendly', 'previewConfiguration', 'status', 'tier', 'popularityScore', 'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(templateId);
+    }
+
+    // Collection: customDesigns
+    match /customDesigns/{designId} {
+      allow get: if isValidId(designId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(designId)
+        && isValidCustomDesign(incoming(), designId)
+        && incoming().userId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(designId)
+        && isValidCustomDesign(incoming(), designId)
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() || (
+            existing().userId == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'name', 'description', 'designConfiguration', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isVerifiedUser()
+        && isValidId(designId)
+        && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    // Collection: aiDesignHistory
+    match /aiDesignHistory/{historyId} {
+      allow get: if isValidId(historyId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(historyId)
+        && isValidAIDesignHistory(incoming(), historyId)
+        && incoming().userId == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isVerifiedUser()
+        && isValidId(historyId)
+        && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    // Collection: platformSettings
+    match /platformSettings/{settingId} {
+      allow get: if isValidId(settingId);
+      allow list: if true;
+      allow create: if isAdmin()
+        && isValidId(settingId)
+        && isValidPlatformSettings(incoming(), settingId)
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(settingId)
+        && isValidPlatformSettings(incoming(), settingId)
+        && incoming().settingId == existing().settingId
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'appName', 'tagline', 'defaultPrimaryColor', 'defaultSecondaryColor',
+          'aiEnabled', 'categories', 'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(settingId);
+    }
+  }
+}

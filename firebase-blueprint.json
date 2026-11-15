@@ -1,0 +1,374 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user account metadata and preferences",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "fullName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 180
+        },
+        "role": {
+          "type": "string",
+          "enum": ["user", "admin"]
+        },
+        "defaultTitle": {
+          "type": "string",
+          "maxLength": 140
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 140
+        },
+        "favoriteTemplateIds": {
+          "type": "array",
+          "description": "Up to 50 favorite template IDs"
+        },
+        "recentActivities": {
+          "type": "array",
+          "description": "Up to 20 recent CV activity entries"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["userId", "fullName", "email", "role", "createdAt", "updatedAt"]
+    },
+    "CVDocument": {
+      "title": "CVDocument",
+      "description": "User-owned structured CV data, section configuration, and design overrides",
+      "type": "object",
+      "properties": {
+        "cvId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "cvTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "personalInformation": {
+          "type": "object"
+        },
+        "professionalSummary": {
+          "type": "string",
+          "maxLength": 6000
+        },
+        "careerObjective": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "workExperience": {
+          "type": "array"
+        },
+        "education": {
+          "type": "array"
+        },
+        "skills": {
+          "type": "array"
+        },
+        "certifications": {
+          "type": "array"
+        },
+        "languages": {
+          "type": "array"
+        },
+        "projects": {
+          "type": "array"
+        },
+        "awards": {
+          "type": "array"
+        },
+        "publications": {
+          "type": "array"
+        },
+        "volunteerExperience": {
+          "type": "array"
+        },
+        "references": {
+          "type": "array"
+        },
+        "sectionOrder": {
+          "type": "array"
+        },
+        "hiddenSections": {
+          "type": "array"
+        },
+        "sectionTitles": {
+          "type": "object"
+        },
+        "selectedTemplateId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "designOverrides": {
+          "type": "object"
+        },
+        "atsMode": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["cvId", "userId", "cvTitle", "personalInformation", "selectedTemplateId", "createdAt", "updatedAt"]
+    },
+    "CVTemplate": {
+      "title": "CVTemplate",
+      "description": "Official CV design template managed by administrators",
+      "type": "object",
+      "properties": {
+        "templateId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "profession": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 600
+        },
+        "layoutConfiguration": {
+          "type": "object"
+        },
+        "colorConfiguration": {
+          "type": "object"
+        },
+        "typographyConfiguration": {
+          "type": "object"
+        },
+        "atsFriendly": {
+          "type": "boolean"
+        },
+        "previewConfiguration": {
+          "type": "object"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["published", "draft"]
+        },
+        "tier": {
+          "type": "string",
+          "enum": ["free", "premium"]
+        },
+        "popularityScore": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["templateId", "name", "category", "layoutConfiguration", "colorConfiguration", "typographyConfiguration", "atsFriendly", "status", "createdAt", "updatedAt"]
+    },
+    "CustomDesign": {
+      "title": "CustomDesign",
+      "description": "User-created custom CV template design configuration",
+      "type": "object",
+      "properties": {
+        "designId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "designConfiguration": {
+          "type": "object"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["designId", "userId", "name", "designConfiguration", "createdAt", "updatedAt"]
+    },
+    "AIDesignHistoryEntry": {
+      "title": "AIDesignHistoryEntry",
+      "description": "Prompt and generated design configuration history for AI Design Generator",
+      "type": "object",
+      "properties": {
+        "historyId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "cvId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "generatedConfiguration": {
+          "type": "object"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["historyId", "userId", "prompt", "generatedConfiguration", "createdAt"]
+    },
+    "PlatformSettings": {
+      "title": "PlatformSettings",
+      "description": "Global application branding, categories, and AI configuration managed by admins",
+      "type": "object",
+      "properties": {
+        "settingId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 64
+        },
+        "appName": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "tagline": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "defaultPrimaryColor": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "defaultSecondaryColor": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "aiEnabled": {
+          "type": "boolean"
+        },
+        "categories": {
+          "type": "array"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["settingId", "appName", "tagline", "aiEnabled", "updatedAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Trusted administrator role lookup record",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 180
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["userId", "email", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profiles and preferences, isolated by userId."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Trusted administrator lookup collection."
+    },
+    "/cvs/{cvId}": {
+      "schema": { "$ref": "#/entities/CVDocument" },
+      "description": "User CV documents with personal data, sections, and design overrides."
+    },
+    "/templates/{templateId}": {
+      "schema": { "$ref": "#/entities/CVTemplate" },
+      "description": "Official CV templates managed by administrators."
+    },
+    "/customDesigns/{designId}": {
+      "schema": { "$ref": "#/entities/CustomDesign" },
+      "description": "User-saved custom CV design configurations."
+    },
+    "/aiDesignHistory/{historyId}": {
+      "schema": { "$ref": "#/entities/AIDesignHistoryEntry" },
+      "description": "AI Design Generator prompt and output history per user."
+    },
+    "/platformSettings/{settingId}": {
+      "schema": { "$ref": "#/entities/PlatformSettings" },
+      "description": "Application branding and AI settings managed by administrators."
+    }
+  }
+}
